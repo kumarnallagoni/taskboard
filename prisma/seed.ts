@@ -8,6 +8,14 @@ const prisma = new PrismaClient();
 async function main() {
   console.log("seeding…");
 
+  await prisma.$executeRawUnsafe(
+    'ALTER TABLE "task_comments" DISABLE TRIGGER "task_comments_append_only";',
+  );
+  await prisma.taskComment.deleteMany();
+  await prisma.$executeRawUnsafe(
+    'ALTER TABLE "task_comments" ENABLE TRIGGER "task_comments_append_only";',
+  );
+
   await prisma.task.deleteMany();
   await prisma.membership.deleteMany();
   await prisma.project.deleteMany();

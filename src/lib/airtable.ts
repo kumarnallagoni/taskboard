@@ -100,7 +100,7 @@ function toAirtableFields(
   task: AirtableTaskLike,
   project: { id: string; name: string },
 ): FieldSet {
-  return {
+  const fields: FieldSet = {
     TaskBoardId: task.id,
     ProjectId: task.projectId ?? project.id,
     ProjectName: task.project?.name ?? project.name,
@@ -110,9 +110,19 @@ function toAirtableFields(
     Assignee: task.assignee?.name ?? "",
     CreatedBy: task.createdBy?.name ?? "",
     Position: task.position,
-    CreatedAt: toIsoString(task.createdAt),
-    UpdatedAt: toIsoString(task.updatedAt),
   };
+
+  const createdAt = toAirtableDateValue(task.createdAt);
+  if (createdAt) {
+    fields.CreatedAt = createdAt;
+  }
+
+  const updatedAt = toAirtableDateValue(task.updatedAt);
+  if (updatedAt) {
+    fields.UpdatedAt = updatedAt;
+  }
+
+  return fields;
 }
 
 async function getExistingTaskIdMap(table: AirtableTableLike) {
@@ -196,11 +206,22 @@ function isTransientFailure(error: unknown): boolean {
   );
 }
 
-function toIsoString(value: Date | string): string {
-  const date = typeof value === "string" ? new Date(value) : value;
-  return Number.isNaN(date.getTime())
-    ? new Date(0).toISOString()
-    : date.toISOString();
+function toAirtableDateValue(value: Date | string): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  const raw = typeof value === "string" ? value.trim() : value.toISOString();
+  if (!raw) {
+    return null;
+  }
+
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date.toISOString();
 }
 
 function delay(ms: number): Promise<void> {
