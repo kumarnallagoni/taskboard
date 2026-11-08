@@ -47,6 +47,7 @@ npm run dev
 This is part of the Ajackus evaluation process. We evaluate how you collaborate with AI tools — your prompting strategy, how you break down problems, and how you review AI suggestions. The captured conversations help us understand your workflow.
 
 **How it works:**
+
 - A pre-commit git hook runs automatically before each commit
 - It copies conversation files from AI tool directories (e.g., `.claude/`, `.cursor/`) into `.ai-conversations/`
 - These files are staged and included in your commit
@@ -59,19 +60,20 @@ This is part of the Ajackus evaluation process. We evaluate how you collaborate 
 ## Seed Data
 
 The seed file creates:
+
 - 5 users across 3 projects with different roles (admin / member / viewer)
 - 3 projects with realistic task distributions
 - 12 tasks spanning all four statuses (`todo`, `in_progress`, `review`, `done`)
 
 All user passwords are: `password123`
 
-| Email | Role on which project |
-|-------|----------------------|
+| Email               | Role on which project                                     |
+| ------------------- | --------------------------------------------------------- |
 | meera@taskboard.dev | admin on Q3 Launch & Internal Tools, member on Onboarding |
-| arjun@taskboard.dev | admin on Onboarding, member on Q3 Launch |
-| kavya@example.com | member on Q3 Launch |
-| dev@example.com | viewer on Q3 Launch |
-| lina@example.com | member on Onboarding |
+| arjun@taskboard.dev | admin on Onboarding, member on Q3 Launch                  |
+| kavya@example.com   | member on Q3 Launch                                       |
+| dev@example.com     | viewer on Q3 Launch                                       |
+| lina@example.com    | member on Onboarding                                      |
 
 ## Authentication
 
@@ -90,22 +92,68 @@ curl -H "Authorization: Bearer <token>" http://localhost:3000/api/projects
 ## API Endpoints
 
 ### Auth
+
 - `POST /api/auth/register` — Create account
 - `POST /api/auth/login` — Sign in, get JWT
 - `GET /api/users/me` — Current user (authenticated)
 
 ### Projects
+
 - `GET /api/projects` — List projects you're a member of (authenticated)
 - `POST /api/projects` — Create a project (authenticated; creator becomes admin)
 - `GET /api/projects/:id` — Project detail with tasks and members (authenticated)
 - `PATCH /api/projects/:id` — Update project (authenticated)
 - `DELETE /api/projects/:id` — Delete project (authenticated)
+- `POST /api/projects/:id/export` — Export project tasks to Airtable (admins and members only)
 
 ### Tasks
+
 - `GET /api/projects/:id/tasks` — List tasks in a project (authenticated)
 - `POST /api/projects/:id/tasks` — Create a task (authenticated)
 - `PATCH /api/tasks/:id` — Update a task (authenticated)
 - `DELETE /api/tasks/:id` — Delete a task (authenticated)
+
+## Airtable export
+
+Project exports are sent to Airtable using the official `airtable` npm package. Credentials stay on the server, and the API only allows admins and members of the target project to run the export.
+
+### Required environment variables
+
+Add these to your local `.env` or deployment environment:
+
+```bash
+AIRTABLE_API_KEY=your_airtable_personal_access_token
+AIRTABLE_BASE_ID=appXXXXXXXXXXXXXX
+AIRTABLE_TABLE_NAME=Tasks
+```
+
+### Required Airtable table fields
+
+The export upserts against a unique field named `TaskBoardId` so repeated exports do not create duplicates. The target table should include these field names exactly:
+
+- `TaskBoardId` — project task ID used as the stable record key
+- `ProjectId` — TaskBoard project ID
+- `ProjectName` — project display name
+- `Title` — task title
+- `Description` — optional task description
+- `Status` — task status (`todo`, `in_progress`, `review`, `done`)
+- `Assignee` — assignee display name
+- `CreatedBy` — creator display name
+- `Position` — task order in the column
+- `CreatedAt` — ISO timestamp of task creation
+- `UpdatedAt` — ISO timestamp from the latest task edit
+
+The export response is a JSON summary with:
+
+```json
+{
+  "created": 12,
+  "updated": 8,
+  "failed": 1
+}
+```
+
+Transient network or 429/5xx Airtable failures are retried with a bounded backoff. Permanent validation/auth errors are not retried, and each task record is handled independently so one failure does not stop the rest of the export.
 
 ## Tech Stack
 
