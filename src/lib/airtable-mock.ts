@@ -57,13 +57,20 @@ export class AirtableMockClient {
    * Create a new record. If `input.id` is provided, this acts as an upsert:
    * an existing record with that id will be replaced.
    */
-  async create(input: AirtableCreateInput): Promise<AirtableRecord> {
+  async create(
+    input: AirtableCreateInput | AirtableFields,
+  ): Promise<AirtableRecord> {
     this.maybeThrow();
-    const id = input.id ?? `rec_${cryptoRandom()}`;
+    const payload =
+      "fields" in (input as AirtableCreateInput)
+        ? (input as AirtableCreateInput)
+        : { fields: input as AirtableFields };
+    const id = payload.id ?? `rec_${cryptoRandom()}`;
     const record: AirtableRecord = {
       id,
-      fields: input.fields,
-      createdTime: this.records.get(id)?.createdTime ?? new Date().toISOString(),
+      fields: payload.fields,
+      createdTime:
+        this.records.get(id)?.createdTime ?? new Date().toISOString(),
     };
     this.records.set(id, record);
     return record;
@@ -95,6 +102,26 @@ export class AirtableMockClient {
     return Array.from(this.records.values());
   }
 
+  select(config: { fields?: string[]; pageSize?: number } = {}) {
+    return {
+      eachPage: (
+        onPage: (
+          records: Array<{ id: string; get: (field: string) => unknown }>,
+          fetchNextPage: () => void,
+        ) => void,
+        onDone: (error?: unknown) => void,
+      ) => {
+        this.maybeThrow();
+        const records = Array.from(this.records.values()).map((record) => ({
+          id: record.id,
+          get: (field: string) => record.fields[field],
+        }));
+        onPage(records, () => onDone());
+        onDone();
+      },
+    };
+  }
+
   // ---------- test-only helpers (not part of the real Airtable API) ----------
 
   /** Reset the mock to an empty state. Useful between tests. */
@@ -104,7 +131,10 @@ export class AirtableMockClient {
   }
 
   /** Configure the failure simulation. Set rate to 0 to disable. */
-  __setFailureRate(rate: number, type: AirtableErrorType = "server-error"): void {
+  __setFailureRate(
+    rate: number,
+    type: AirtableErrorType = "server-error",
+  ): void {
     this.options = { failureRate: rate, failureType: type };
   }
 
@@ -124,7 +154,8 @@ export class AirtableMockClient {
     const rate = this.options.failureRate ?? 0;
     if (rate > 0 && Math.random() < rate) {
       const type = this.options.failureType ?? "server-error";
-      const statusCode = type === "rate-limit" ? 429 : type === "network" ? 0 : 500;
+      const statusCode =
+        type === "rate-limit" ? 429 : type === "network" ? 0 : 500;
       throw new AirtableError(`Simulated ${type}`, type, statusCode);
     }
   }

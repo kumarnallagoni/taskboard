@@ -4,7 +4,7 @@ import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiFetch, getToken } from "@/lib/api-client";
+import { apiFetch, getStoredUser, getToken } from "@/lib/api-client";
 import { Header } from "@/components/Header";
 import { StatusColumn } from "@/components/StatusColumn";
 import { TaskDetail } from "@/components/TaskDetail";
@@ -22,14 +22,25 @@ export default function ProjectPage({ params }: PageProps) {
   const [newTitle, setNewTitle] = useState("");
   const [newColumn, setNewColumn] = useState<TaskStatus>("todo");
   const [error, setError] = useState<string | null>(null);
+  const [exportResult, setExportResult] = useState<{
+    type: "success" | "partial" | "error";
+    message: string;
+  } | null>(null);
+
+  const currentUser = getStoredUser();
 
   useEffect(() => {
     if (!getToken()) router.replace("/login");
   }, [router]);
 
-  const { data, isLoading, error: queryError } = useQuery({
+  const {
+    data,
+    isLoading,
+    error: queryError,
+  } = useQuery({
     queryKey: ["project", id],
-    queryFn: () => apiFetch<{ project: ApiProjectDetail }>(`/api/projects/${id}`),
+    queryFn: () =>
+      apiFetch<{ project: ApiProjectDetail }>(`/api/projects/${id}`),
   });
 
   const createTask = useMutation({
@@ -42,10 +53,50 @@ export default function ProjectPage({ params }: PageProps) {
       setNewTitle("");
       queryClient.invalidateQueries({ queryKey: ["project", id] });
     },
-    onError: (err) => setError(err instanceof Error ? err.message : "create failed"),
+    onError: (err) =>
+      setError(err instanceof Error ? err.message : "create failed"),
+  });
+
+  const exportTasks = useMutation({
+    mutationFn: () =>
+      apiFetch<{ created: number; updated: number; failed: number }>(
+        `/api/projects/${id}/export`,
+        {
+          method: "POST",
+        },
+      ),
+    onSuccess: (summary) => {
+      if (summary.failed === 0) {
+        setExportResult({
+          type: "success",
+          message: `Export complete: ${summary.created} created, ${summary.updated} updated, 0 failed.`,
+        });
+      } else if (summary.created + summary.updated > 0) {
+        setExportResult({
+          type: "partial",
+          message: `Partial export: ${summary.created} created, ${summary.updated} updated, ${summary.failed} failed.`,
+        });
+      } else {
+        setExportResult({
+          type: "error",
+          message: `Export failed: ${summary.failed} records could not be exported.`,
+        });
+      }
+    },
+    onError: (err) => {
+      setExportResult({
+        type: "error",
+        message: err instanceof Error ? err.message : "Airtable export failed.",
+      });
+    },
   });
 
   const project = data?.project;
+  const currentUserRole =
+    project?.memberships.find((member) => member.user.id === currentUser?.id)
+      ?.role ?? null;
+  const canExportProject =
+    currentUserRole === "admin" || currentUserRole === "member";
   const tasksByStatus: Record<TaskStatus, ApiTask[]> = {
     todo: [],
     in_progress: [],
@@ -63,17 +114,16 @@ export default function ProjectPage({ params }: PageProps) {
       <Header />
 
       <main className="max-w-7xl mx-auto px-6 py-8">
-        <Link
-          href="/dashboard"
-          className="text-sm text-muted hover:text-white"
-        >
+        <Link href="/dashboard" className="text-sm text-muted hover:text-white">
           ← all projects
         </Link>
 
         {isLoading && <p className="text-muted text-sm mt-6">loading…</p>}
         {queryError && (
           <p className="text-sm text-red-400 mt-6">
-            {queryError instanceof Error ? queryError.message : "failed to load"}
+            {queryError instanceof Error
+              ? queryError.message
+              : "failed to load"}
           </p>
         )}
 
@@ -88,10 +138,36 @@ export default function ProjectPage({ params }: PageProps) {
                   </p>
                 )}
                 <p className="text-xs text-muted mt-2">
-                  owner: {project.owner.name} · {project.memberships.length} members
+                  owner: {project.owner.name} · {project.memberships.length}{" "}
+                  members
                 </p>
               </div>
+
+              {canExportProject && (
+                <button
+                  type="button"
+                  onClick={() => exportTasks.mutate()}
+                  disabled={exportTasks.isPending}
+                  className="bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium rounded-md px-4 py-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {exportTasks.isPending ? "exporting…" : "export to Airtable"}
+                </button>
+              )}
             </div>
+
+            {exportResult && (
+              <div
+                className={
+                  exportResult.type === "success"
+                    ? "mb-4 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200"
+                    : exportResult.type === "partial"
+                      ? "mb-4 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200"
+                      : "mb-4 rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200"
+                }
+              >
+                {exportResult.message}
+              </div>
+            )}
 
             <section className="bg-surface border border-border rounded-lg p-4 mb-6">
               <h2 className="text-sm font-medium mb-3">add a task</h2>
@@ -100,7 +176,10 @@ export default function ProjectPage({ params }: PageProps) {
                   e.preventDefault();
                   if (!newTitle.trim()) return;
                   setError(null);
-                  createTask.mutate({ title: newTitle.trim(), status: newColumn });
+                  createTask.mutate({
+                    title: newTitle.trim(),
+                    status: newColumn,
+                  });
                 }}
                 className="flex gap-2"
               >

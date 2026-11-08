@@ -6,7 +6,7 @@ export type AirtableExportSummary = {
   failed: number;
 };
 
-type AirtableTaskLike = {
+export type AirtableTaskLike = {
   id: string;
   projectId: string;
   title: string;
@@ -18,6 +18,20 @@ type AirtableTaskLike = {
   assignee?: { name?: string | null } | null;
   createdBy?: { name?: string | null } | null;
   project?: { name?: string | null } | null;
+};
+
+export type AirtableTableLike = {
+  create: (fields: FieldSet) => Promise<{ id: string }>;
+  update: (id: string, fields: FieldSet) => Promise<{ id: string }>;
+  select: (options: { fields?: string[]; pageSize?: number }) => {
+    eachPage: (
+      onPage: (
+        records: Array<{ id: string; get: (field: string) => unknown }>,
+        fetchNextPage: () => void,
+      ) => void,
+      onDone: (error?: unknown) => void,
+    ) => void;
+  };
 };
 
 export type AirtableExportOptions = {
@@ -46,7 +60,15 @@ export async function exportProjectTasksToAirtable({
   }
 
   const base = new Airtable({ apiKey }).base(baseId);
-  const table = base(tableName);
+  const table = base(tableName) as unknown as AirtableTableLike;
+  return exportTasksToAirtableTable(table, tasks, project);
+}
+
+export async function exportTasksToAirtableTable(
+  table: AirtableTableLike,
+  tasks: AirtableTaskLike[],
+  project: { id: string; name: string },
+): Promise<AirtableExportSummary> {
   const existingByTaskId = await getExistingTaskIdMap(table);
 
   let created = 0;
@@ -93,7 +115,7 @@ function toAirtableFields(
   };
 }
 
-async function getExistingTaskIdMap(table: ReturnType<Airtable.Base["table"]>) {
+async function getExistingTaskIdMap(table: AirtableTableLike) {
   const map = new Map<string, string>();
 
   await new Promise<void>((resolve, reject) => {
