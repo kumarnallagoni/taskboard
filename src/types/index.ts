@@ -27,6 +27,15 @@ export type ApiProjectMember = {
   user: ApiUser & { passwordHash?: string };
 };
 
+export type ApiTaskComment = {
+  id: string;
+  taskId: string;
+  authorId: string;
+  body: string;
+  createdAt: string;
+  author: ApiUser;
+};
+
 export type ApiProjectDetail = {
   id: string;
   name: string;
@@ -46,4 +55,9 @@ export const STATUS_LABELS: Record<TaskStatus, string> = {
   done: "Done",
 };
 
-export const STATUS_ORDER: TaskStatus[] = ["todo", "in_progress", "review", "done"];
+export const STATUS_ORDER: TaskStatus[] = [
+  "todo",
+  "in_progress",
+  "review",
+  "done",
+];
