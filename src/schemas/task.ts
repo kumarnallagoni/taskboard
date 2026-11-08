@@ -18,5 +18,15 @@ export const updateTaskSchema = z.object({
   position: z.number().int().min(0).optional(),
 });
 
+export const createTaskCommentSchema = z.object({
+  body: z
+    .string()
+    .trim()
+    .min(1, "comment body is required")
+    .max(2000, "comment is too long")
+    .refine((value) => value.trim().length > 0, "comment body is required"),
+});
+
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;
 export type UpdateTaskInput = z.infer<typeof updateTaskSchema>;
+export type CreateTaskCommentInput = z.infer<typeof createTaskCommentSchema>;

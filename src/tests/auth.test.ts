@@ -21,6 +21,10 @@ vi.mock("@/lib/prisma", () => ({
       findUnique: vi.fn(),
       update: vi.fn(),
     },
+    taskComment: {
+      create: vi.fn(),
+      findMany: vi.fn(),
+    },
   },
 }));
 
@@ -72,5 +76,39 @@ describe("task authorization", () => {
 
     expect(res.status).toBe(403);
     expect(prisma.task.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("task comments", () => {
+  it("rejects viewers from posting comments", async () => {
+    const { POST } = await import("@/app/api/tasks/[id]/comments/route");
+    vi.mocked(getCurrentUser).mockResolvedValue({
+      id: "user-1",
+      email: "viewer@example.com",
+      name: "Viewer User",
+    });
+    vi.mocked(getProjectMembership).mockResolvedValue({ role: "viewer" });
+    vi.mocked(prisma.task.findUnique).mockResolvedValue({
+      id: "task-1",
+      projectId: "project-1",
+      title: "Existing task",
+      description: "Original",
+      status: "todo",
+      assigneeId: null,
+      createdById: "owner-1",
+      position: 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const req = new NextRequest("http://localhost/api/tasks/task-1/comments", {
+      method: "POST",
+      body: JSON.stringify({ body: "This should fail" }),
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const res = await POST(req, { params: Promise.resolve({ id: "task-1" }) });
+
+    expect(res.status).toBe(403);
   });
 });
