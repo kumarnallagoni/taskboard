@@ -164,6 +164,29 @@ describe("airtable export helper", () => {
     });
   });
 
+  it("serializes date fields as date-only values for Airtable date columns", async () => {
+    const client = new AirtableMockClient();
+    const project = { id: "project-1", name: "Q3 Launch" };
+    const task = {
+      id: "task-date-only",
+      projectId: "project-1",
+      title: "Date field check",
+      description: "verify ISO date format",
+      status: "todo",
+      position: 3,
+      createdAt: "2024-04-01T12:30:00.000Z",
+      updatedAt: "2024-04-02T18:45:00.000Z",
+    };
+
+    await exportTasksToAirtableTable(client as any, [task], project);
+    const records = client.__getRecords();
+
+    expect(records[0].fields).toMatchObject({
+      CreatedAt: "2024-04-01",
+      UpdatedAt: "2024-04-02",
+    });
+  });
+
   it("retries transient failures up to the bounded backoff limit", async () => {
     const client = new AirtableMockClient();
     const project = { id: "project-1", name: "Q3 Launch" };

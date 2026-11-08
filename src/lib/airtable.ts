@@ -221,7 +221,7 @@ function toAirtableDateValue(value: Date | string): string | null {
     return null;
   }
 
-  return date.toISOString();
+  return date.toISOString().slice(0, 10);
 }
 
 function delay(ms: number): Promise<void> {
